@@ -1,0 +1,92 @@
+# =============================================================
+# GymFuel AI — локальный dev-стек
+# =============================================================
+# Запуск:   docker-compose up --build
+# Остановка: docker-compose down
+# С туннелем: docker-compose --profile tunnel up
+# =============================================================
+
+services:
+  # -------------------------------------------------------------
+  # Backend: FastAPI
+  # -------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gymfuel-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      UVICORN_WORKERS: "2"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Только для dev: hot-reload через bind-mount
+      - ./app:/app/app:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - gymfuel-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # -------------------------------------------------------------
+  # Redis: кеш распознаваний + дневных агрегатов
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7.4-alpine
+    container_name: gymfuel-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    networks:
+      - gymfuel-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # Ngrok (опционально, profile=tunnel) — публичный туннель
+  # для тестов OAuth / webhooks / Telegram-бота без деплоя
+  # docker-compose --profile tunnel up
+  # -------------------------------------------------------------
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: gymfuel-ngrok
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on:
+      - backend
+    environment:
+      NGROK_AUTHTOKEN: "${NGROK_AUTHTOKEN}"
+    command: "http backend:8000 --log=stdout"
+    ports:
+      - "4040:4040"   # веб-UI ngrok
+    networks:
+      - gymfuel-net
+
+networks:
+  gymfuel-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local

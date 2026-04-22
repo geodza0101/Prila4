@@ -1,0 +1,28 @@
+# Secrets — КРИТИЧНО
+.config/
+.env
+.env.local
+.env.production
+**/.env
+
+# Backup и системные
+.backup-готовое/
+.DS_Store
+**/.DS_Store
+test.txt
+
+# Node/Python
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build
+dist/
+build/
+.next/
+.vercel/
+
+# OS
+Thumbs.db

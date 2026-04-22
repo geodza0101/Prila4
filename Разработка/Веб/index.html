@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GymFuel AI — Считай калории и спортпит по фото</title>
+<meta name="description" content="AI-счётчик для качков: фото еды + твой спортпит = точная дневная норма. Без таблиц, без гугла.">
+<meta property="og:title" content="GymFuel AI">
+<meta property="og:description" content="Не знаешь сколько ел белка? Сфоткай тарелку.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0A0B;
+    --bg-2: #111113;
+    --bg-3: #18181B;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #FAFAFA;
+    --text-2: #A1A1AA;
+    --text-3: #71717A;
+    --orange: #FF6B00;
+    --orange-2: #FF9544;
+    --gold: #FFB700;
+    --purple: #8B5CF6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+  .serif { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; letter-spacing: -0.02em; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* --- Grain --- */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/></svg>");
+    mix-blend-mode: overlay;
+  }
+
+  /* --- Background gradient mesh (hero) --- */
+  .mesh {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .mesh::before, .mesh::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
+    opacity: 0.4;
+  }
+  .mesh::before {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, #FF6B00 0%, transparent 70%);
+    top: -200px; left: 10%;
+    animation: float1 18s ease-in-out infinite;
+  }
+  .mesh::after {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, #8B5CF6 0%, transparent 70%);
+    top: 100px; right: 0%;
+    animation: float2 22s ease-in-out infinite;
+  }
+  @keyframes float1 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(80px, 60px); }
+  }
+  @keyframes float2 {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-60px, 40px); }
+  }
+
+  /* --- Nav --- */
+  nav {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    z-index: 100;
+    background: rgba(17, 17, 19, 0.7);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 8px 8px 20px;
+    display: flex; align-items: center; gap: 32px;
+    font-size: 14px;
+  }
+  nav .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.01em; }
+  nav .logo-mark {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: linear-gradient(135deg, #FF6B00, #FFB700);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 13px; color: #000;
+  }
+  nav .links { display: flex; gap: 24px; color: var(--text-2); }
+  nav .links a { color: inherit; text-decoration: none; transition: color 0.2s; }
+  nav .links a:hover { color: var(--text); }
+  nav .cta-nav {
+    background: var(--text); color: var(--bg);
+    padding: 9px 18px; border-radius: 999px;
+    font-weight: 600; text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  nav .cta-nav:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(255,255,255,0.15); }
+  @media (max-width: 700px) { nav .links { display: none; } }
+
+  /* --- Hero --- */
+  .hero {
+    position: relative;
+    padding: 180px 24px 120px;
+    overflow: hidden;
+    min-height: 100vh;
+    display: flex; align-items: center;
+  }
+  .hero-inner {
+    max-width: 1280px; margin: 0 auto; width: 100%;
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 64px; align-items: center;
+  }
+  @media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; gap: 48px; } }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px 6px 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 13px; color: var(--text-2);
+    margin-bottom: 32px;
+  }
+  .pill-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22C55E;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  h1.hero-headline {
+    font-size: clamp(48px, 7.5vw, 96px);
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.045em;
+    margin-bottom: 28px;
+  }
+  h1 .grad {
+    background: linear-gradient(135deg, #FF6B00 0%, #FFB700 50%, #FF6B00 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero-sub {
+    font-size: clamp(17px, 1.3vw, 20px);
+    color: var(--text-2);
+    max-width: 540px;
+    margin-bottom: 40px;
+    line-height: 1.55;
+  }
+
+  .cta-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 32px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-weight: 600; font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+    cursor: pointer; border: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #FF6B00, #FF9544);
+    color: #000;
+    box-shadow: 0 8px 32px rgba(255,107,0,0.35), inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(255,107,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .btn-ghost {
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.06); border-color: var(--border-strong); }
+
+  .trust { display: flex; gap: 20px; align-items: center; font-size: 13px; color: var(--text-3); flex-wrap: wrap; }
+  .trust .stars { color: #FFB700; letter-spacing: 2px; }
+  .trust .sep { width: 3px; height: 3px; background: var(--text-3); border-radius: 50%; }
+
+  /* --- Phone mockup --- */
+  .mockup-wrap {
+    position: relative;
+    display: flex; justify-content: center;
+    perspective: 1200px;
+  }
+  .mockup {
+    position: relative;
+    width: 320px;
+    aspect-ratio: 9/19.5;
+    background: #0F0F10;
+    border-radius: 44px;
+    border: 1.5px solid rgba(255,255,255,0.12);
+    padding: 18px 14px;
+    box-shadow:
+      0 0 0 10px #1A1A1C,
+      0 0 0 11px rgba(255,255,255,0.08),
+      0 40px 100px rgba(255,107,0,0.25),
+      0 20px 60px rgba(0,0,0,0.5);
+    transform: rotate(-3deg) translateY(0);
+    animation: mockup-float 8s ease-in-out infinite;
+  }
+  @keyframes mockup-float {
+    0%, 100% { transform: rotate(-3deg) translateY(0); }
+    50% { transform: rotate(-3deg) translateY(-16px); }
+  }
+  .notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 90px; height: 22px; background: #000; border-radius: 999px; z-index: 2;
+  }
+  .mockup-screen {
+    background: #0A0A0B; border-radius: 30px; padding: 36px 16px 16px; height: 100%;
+    display: flex; flex-direction: column;
+  }
+  .m-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .m-head-date { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .m-head-name { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .m-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #FF6B00, #FFB700); }
+
+  .m-main {
+    background: #111113;
+    border: 1px solid var(--border);
+    border-radius: 18px; padding: 18px;
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .m-main::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at top right, rgba(255,107,0,0.15), transparent 60%);
+    pointer-events: none;
+  }
+  .m-label { font-size: 10px; color: var(--text-3); font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+  .m-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 54px; font-weight: 800;
+    background: linear-gradient(135deg, #FF6B00, #FFB700);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+  .m-target { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+  .m-bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 999px; margin-top: 10px; overflow: hidden; }
+  .m-bar-fill { height: 100%; background: linear-gradient(90deg, #FF6B00, #FFB700); border-radius: 999px; }
+
+  .m-macros { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .m-macro { background: #111113; border: 1px solid var(--border); border-radius: 12px; padding: 10px; text-align: center; }
+  .m-macro-v { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 16px; }
+  .m-macro-l { font-size: 9px; color: var(--text-3); margin-top: 2px; }
+
+  .m-tip {
+    background: linear-gradient(135deg, rgba(255,107,0,0.12), rgba(255,183,0,0.06));
+    border: 1px solid rgba(255,107,0,0.3);
+    border-radius: 12px; padding: 10px 12px;
+    font-size: 11px; color: var(--text-2); line-height: 1.45;
+  }
+  .m-tip b { color: var(--orange); display: block; font-size: 9px; letter-spacing: 1px; margin-bottom: 3px; }
+
+  /* --- Logos marquee --- */
+  .logos-section { padding: 48px 24px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .logos-label { text-align: center; font-size: 12px; color: var(--text-3); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 28px; font-weight: 600; }
+  .marquee { overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+  .marquee-track { display: flex; gap: 64px; animation: marquee 30s linear infinite; width: max-content; }
+  @keyframes marquee { to { transform: translateX(-50%); } }
+  .logo-item {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-2); font-weight: 700; font-size: 18px;
+    white-space: nowrap;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+  .logo-item:hover { opacity: 1; }
+
+  /* --- Section --- */
+  section { padding: 120px 24px; position: relative; }
+  .container { max-width: 1200px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-block;
+    font-size: 13px; color: var(--orange); font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: clamp(38px, 5vw, 64px);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    margin-bottom: 20px;
+  }
+  .section-sub { font-size: 18px; color: var(--text-2); max-width: 560px; margin-bottom: 64px; line-height: 1.55; }
+  .section-head { text-align: center; margin-bottom: 72px; }
+  .section-head .section-sub { margin: 0 auto; }
+
+  /* --- How it works --- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .steps { grid-template-columns: 1fr; } }
+  .step-card {
+    background: linear-gradient(180deg, var(--bg-2), var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+  .step-card:hover { border-color: var(--border-strong); transform: translateY(-4px); }
+  .step-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,107,0,0.5), transparent);
+  }
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--orange); font-weight: 700;
+    letter-spacing: 1.5px; margin-bottom: 24px;
+  }
+  .step-icon {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(255,107,0,0.15), rgba(255,183,0,0.05));
+    border: 1px solid rgba(255,107,0,0.2);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 24px;
+  }
+  .step-card h3 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 12px; }
+  .step-card p { color: var(--text-2); font-size: 15px; line-height: 1.6; }
+
+  /* --- Features bento --- */
+  .bento {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 16px;
+    min-height: 580px;
+  }
+  @media (max-width: 900px) {
+    .bento { grid-template-columns: 1fr; grid-template-rows: auto; min-height: auto; }
+  }
+  .bento-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .bento-card:hover { transform: translateY(-4px); border-color: var(--border-strong); }
+  .bento-card.main { grid-row: span 2; background: linear-gradient(180deg, var(--bg-2), rgba(255,107,0,0.05)); }
+  @media (max-width: 900px) { .bento-card.main { grid-row: auto; } }
+  .bento-card h3 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 10px; }
+  .bento-card p { color: var(--text-2); font-size: 14px; line-height: 1.6; }
+  .bento-card .icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: rgba(255,107,0,0.1);
+    border: 1px solid rgba(255,107,0,0.2);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .bento-visual {
+    margin-top: 24px;
+    padding: 20px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .bento-visual-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .bento-visual-row:last-child { border: none; }
+  .bento-visual-row .g { color: var(--text-3); }
+  .bento-visual-row .v { color: var(--text); font-weight: 700; }
+  .bento-visual-row .h { color: #FF6B00; }
+
+  /* --- Comparison --- */
+  .compare {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+  .compare-table { width: 100%; border-collapse: collapse; }
+  .compare-table th, .compare-table td { padding: 18px 20px; text-align: center; font-size: 15px; }
+  .compare-table th {
+    font-weight: 700; font-size: 14px; letter-spacing: 0.02em;
+    color: var(--text-3); text-transform: uppercase;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table th.us {
+    background: linear-gradient(135deg, rgba(255,107,0,0.15), rgba(255,183,0,0.1));
+    color: var(--orange);
+  }
+  .compare-table td { border-bottom: 1px solid var(--border); }
+  .compare-table tr:last-child td { border: none; }
+  .compare-table td:first-child { text-align: left; color: var(--text-2); }
+  .compare-table td.us { background: rgba(255,107,0,0.04); }
+  .check { color: #22C55E; font-weight: 800; font-size: 18px; }
+  .x { color: var(--text-3); }
+  .partial { color: #F59E0B; font-size: 13px; }
+
+  /* --- Pricing --- */
+  .pricing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .pricing { grid-template-columns: 1fr; } }
+  .price-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 32px;
+    position: relative;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .price-card:hover { transform: translateY(-4px); border-color: var(--border-strong); }
+  .price-card.popular {
+    background: linear-gradient(180deg, rgba(255,107,0,0.08), transparent);
+    border: 1px solid rgba(255,107,0,0.4);
+    box-shadow: 0 0 60px rgba(255,107,0,0.15);
+  }
+  .price-badge {
+    position: absolute; top: -12px; right: 32px;
+    background: linear-gradient(135deg, #FF6B00, #FFB700);
+    color: #000; padding: 4px 12px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  }
+  .price-name { font-size: 13px; color: var(--text-3); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; }
+  .price-value { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+  .price-value .mono {
+    font-size: 56px; font-weight: 800; letter-spacing: -0.04em;
+  }
+  .price-note { font-size: 13px; color: var(--text-3); margin-bottom: 28px; }
+  .price-list { list-style: none; margin-bottom: 32px; }
+  .price-list li { padding: 9px 0; font-size: 14px; color: var(--text-2); display: flex; gap: 10px; align-items: flex-start; }
+  .price-list li::before { content: '✓'; color: #22C55E; font-weight: 700; flex-shrink: 0; }
+  .price-card .btn { width: 100%; justify-content: center; }
+
+  /* --- Testimonials --- */
+  .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .testimonials-grid { grid-template-columns: 1fr; } }
+  .testimonial {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+  }
+  .testimonial-quote {
+    font-size: 16px; line-height: 1.55; margin-bottom: 20px; color: var(--text);
+  }
+  .testimonial-author { display: flex; align-items: center; gap: 12px; }
+  .testimonial-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, #FF6B00, #FFB700);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; color: #000;
+  }
+  .testimonial-name { font-weight: 600; font-size: 14px; }
+  .testimonial-role { font-size: 12px; color: var(--text-3); }
+
+  /* --- FAQ --- */
+  .faq-item {
+    border-bottom: 1px solid var(--border);
+    padding: 24px 0;
+    cursor: pointer;
+  }
+  .faq-q {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 18px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  .faq-q::after {
+    content: '+'; font-size: 24px; font-weight: 400; color: var(--text-3);
+    transition: transform 0.3s;
+  }
+  .faq-item.open .faq-q::after { transform: rotate(45deg); }
+  .faq-a {
+    max-height: 0; overflow: hidden;
+    color: var(--text-2); font-size: 15px; line-height: 1.6;
+    transition: max-height 0.3s, padding 0.3s;
+  }
+  .faq-item.open .faq-a { max-height: 200px; padding-top: 16px; }
+
+  /* --- Final CTA --- */
+  .final-cta {
+    position: relative;
+    background: linear-gradient(135deg, rgba(255,107,0,0.1), rgba(139,92,246,0.05));
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 80px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .final-cta::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at top, rgba(255,107,0,0.15), transparent 60%);
+    pointer-events: none;
+  }
+  .final-cta h2 { position: relative; z-index: 1; margin-bottom: 20px; }
+  .final-cta p { position: relative; z-index: 1; color: var(--text-2); max-width: 480px; margin: 0 auto 32px; font-size: 17px; }
+  .final-cta .btn { position: relative; z-index: 1; padding: 18px 32px; font-size: 17px; }
+
+  /* --- Footer --- */
+  footer { padding: 64px 24px 40px; border-top: 1px solid var(--border); }
+  .footer-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
+  @media (max-width: 700px) { .footer-inner { grid-template-columns: 1fr 1fr; } }
+  .footer-brand { font-weight: 700; font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .footer-desc { font-size: 14px; color: var(--text-3); max-width: 280px; line-height: 1.6; }
+  .footer-col h4 { font-size: 13px; font-weight: 600; margin-bottom: 16px; color: var(--text-3); text-transform: uppercase; letter-spacing: 1.5px; }
+  .footer-col a { display: block; color: var(--text-2); text-decoration: none; font-size: 14px; padding: 6px 0; transition: color 0.2s; }
+  .footer-col a:hover { color: var(--text); }
+  .footer-bottom {
+    max-width: 1200px; margin: 48px auto 0; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    font-size: 13px; color: var(--text-3);
+  }
+
+  /* --- Reveal animations --- */
+  [data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity 0.7s, transform 0.7s; }
+  [data-reveal].in { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">
+    <div class="logo-mark">G</div>
+    <span>GymFuel</span>
+  </div>
+  <div class="links">
+    <a href="#how">Как работает</a>
+    <a href="#features">Фишки</a>
+    <a href="#pricing">Цена</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <a href="register.html" class="cta-nav">Попробовать →</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="mesh"></div>
+  <div class="hero-inner">
+    <div>
+      <div class="pill" data-reveal>
+        <span class="pill-dot"></span>
+        Бета-тест · осталось 87 мест
+      </div>
+      <h1 class="hero-headline" data-reveal>
+        Хватит гадать,<br/>
+        сколько ты жрёшь <span class="grad">белка.</span>
+      </h1>
+      <p class="hero-sub" data-reveal>
+        AI-счётчик для качков. Сфоткай тарелку — за 3 секунды узнаешь точные КБЖУ.
+        Твой спортпит уже в базе. <span class="serif">Никаких таблиц.</span>
+      </p>
+      <div class="cta-row" data-reveal>
+        <a href="register.html" class="btn btn-primary">
+          Начать бесплатно
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </a>
+        <a href="#how" class="btn btn-ghost">Посмотреть демо</a>
+      </div>
+      <div class="trust" data-reveal>
+        <div><span class="stars">★★★★★</span> <b>4.9</b> · от бета-тестеров</div>
+        <div class="sep"></div>
+        <div>🇷🇺 Русская кухня</div>
+        <div class="sep"></div>
+        <div>Без СМС и карты</div>
+      </div>
+    </div>
+
+    <!-- Phone mockup -->
+    <div class="mockup-wrap" data-reveal>
+      <div class="mockup">
+        <div class="notch"></div>
+        <div class="mockup-screen">
+          <div class="m-head">
+            <div>
+              <div class="m-head-date">Сегодня · ср</div>
+              <div class="m-head-name">Привет, Лёха</div>
+            </div>
+            <div class="m-avatar"></div>
+          </div>
+
+          <div class="m-main">
+            <div class="m-label">Калории</div>
+            <div class="m-value">1 820</div>
+            <div class="m-target">из 2 500 ккал</div>
+            <div class="m-bar"><div class="m-bar-fill" style="width:73%"></div></div>
+          </div>
+
+          <div class="m-macros">
+            <div class="m-macro"><div class="m-macro-v" style="color:#3B9EFF">145<span style="opacity:0.5">г</span></div><div class="m-macro-l">Белок</div></div>
+            <div class="m-macro"><div class="m-macro-v" style="color:#F5C842">180<span style="opacity:0.5">г</span></div><div class="m-macro-l">Углеводы</div></div>
+            <div class="m-macro"><div class="m-macro-v" style="color:#A371F7">58<span style="opacity:0.5">г</span></div><div class="m-macro-l">Жиры</div></div>
+          </div>
+
+          <div class="m-tip">
+            <b>AI-СОВЕТ</b>
+            До нормы белка 55 г. 1 ложка Whey + 100 г творога — и в цель.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div class="logos-section">
+  <div class="logos-label">Спортпит, который ты уже знаешь</div>
+  <div class="marquee">
+    <div class="marquee-track">
+      <div class="logo-item">OPTIMUM NUTRITION</div>
+      <div class="logo-item">MYPROTEIN</div>
+      <div class="logo-item">PRIME KRAFT</div>
+      <div class="logo-item">MAXLER</div>
+      <div class="logo-item">SCITEC</div>
+      <div class="logo-item">MUTANT</div>
+      <div class="logo-item">BSN</div>
+      <div class="logo-item">SYNTRAX</div>
+      <!-- repeat -->
+      <div class="logo-item">OPTIMUM NUTRITION</div>
+      <div class="logo-item">MYPROTEIN</div>
+      <div class="logo-item">PRIME KRAFT</div>
+      <div class="logo-item">MAXLER</div>
+      <div class="logo-item">SCITEC</div>
+      <div class="logo-item">MUTANT</div>
+      <div class="logo-item">BSN</div>
+      <div class="logo-item">SYNTRAX</div>
+    </div>
+  </div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Как это работает</div>
+      <h2 data-reveal>3 секунды —<br/>и еда <span class="serif">записана</span></h2>
+      <p class="section-sub" data-reveal>Не пять минут копания в базе, как в MyFitnessPal. Достал телефон, снял, готово.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step-card" data-reveal>
+        <div class="step-num">01</div>
+        <div class="step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.5"/><path d="M7 6l2-3h6l2 3"/></svg>
+        </div>
+        <h3>Сними тарелку</h3>
+        <p>Куриная грудка, гречка, пара яиц. Даже борщ. Камера + AI справятся.</p>
+      </div>
+      <div class="step-card" data-reveal>
+        <div class="step-num">02</div>
+        <div class="step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 2.5 1 4.5 2.5 6l-1 3 3-1A8 8 0 1 0 12 2z"/><path d="M9 10h.01M12 10h.01M15 10h.01"/></svg>
+        </div>
+        <h3>AI считает БЖУ</h3>
+        <p>Точность 92%. Модель дообучена на русской кухне и 500+ брендах спортпита.</p>
+      </div>
+      <div class="step-card" data-reveal>
+        <div class="step-num">03</div>
+        <div class="step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h3>Записано в дневник</h3>
+        <p>Белок, углеводы, жиры. Видишь, сколько добрал и что нужно сегодня ещё.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES BENTO -->
+<section id="features">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Фишки</div>
+      <h2 data-reveal>Не MyFitnessPal.<br/><span class="serif">Это для тех, кто качает.</span></h2>
+      <p class="section-sub" data-reveal>Приложение для тренажёрного зала, а не для похудения к лету.</p>
+    </div>
+
+    <div class="bento">
+      <div class="bento-card main" data-reveal>
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
+        </div>
+        <h3>Спортпит встроен в рацион</h3>
+        <p>Whey, казеин, креатин, гейнер — учтены в дневной норме. Приложение знает, когда и сколько тебе пить.</p>
+        <div class="bento-visual">
+          <div class="bento-visual-row"><span class="g">Утром</span><span class="v">Креатин <span class="h">5 г</span></span></div>
+          <div class="bento-visual-row"><span class="g">После трени</span><span class="v">Whey <span class="h">30 г</span></span></div>
+          <div class="bento-visual-row"><span class="g">Перед сном</span><span class="v">Казеин <span class="h">40 г</span></span></div>
+          <div class="bento-visual-row"><span class="g">Осталось белка</span><span class="v h">+ 28 г</span></div>
+        </div>
+      </div>
+
+      <div class="bento-card" data-reveal>
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <h3>Тренировка / Отдых</h3>
+        <p>В день ног больше углеводов. В день отдыха меньше. Автоматически.</p>
+      </div>
+
+      <div class="bento-card" data-reveal>
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </div>
+        <h3>Русская кухня</h3>
+        <p>Борщ, пельмени, гречка. Без «продукт не найден».</p>
+      </div>
+
+      <div class="bento-card" data-reveal>
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>AI-диетолог</h3>
+        <p>«Не добрал 40 г белка» → сразу план из того, что у тебя есть в холодильнике.</p>
+      </div>
+
+      <div class="bento-card" data-reveal>
+        <div class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6B00" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <h3>Масса или сушка</h3>
+        <p>Меняешь цель — пересчитываем нормы по ISSN guidelines.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Против кого</div>
+      <h2 data-reveal>GymFuel vs MyFitnessPal</h2>
+      <p class="section-sub" data-reveal>Почему старые счётчики не закрывают задачи качка.</p>
+    </div>
+
+    <div class="compare" data-reveal>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th style="text-align:left">Фича</th>
+            <th class="us">GymFuel</th>
+            <th>MyFitnessPal</th>
+            <th>YAZIO</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Для качков</td><td class="us"><span class="check">✓</span></td><td><span class="x">—</span></td><td><span class="x">—</span></td></tr>
+          <tr><td>Спортпит в рационе</td><td class="us"><span class="check">✓</span></td><td><span class="x">—</span></td><td><span class="x">—</span></td></tr>
+          <tr><td>Русская кухня</td><td class="us"><span class="check">✓</span></td><td><span class="x">—</span></td><td><span class="partial">частично</span></td></tr>
+          <tr><td>Режим тренировка/отдых</td><td class="us"><span class="check">✓</span></td><td><span class="partial">платно</span></td><td><span class="x">—</span></td></tr>
+          <tr><td>Распознавание по фото</td><td class="us"><span class="check">✓</span></td><td><span class="partial">платно</span></td><td><span class="partial">платно</span></td></tr>
+          <tr><td>Цена в РФ</td><td class="us mono" style="font-weight:700;color:var(--orange)">499 ₽</td><td class="mono">~1200 ₽</td><td class="mono">~900 ₽</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section>
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Отзывы</div>
+      <h2 data-reveal>Что говорят <span class="serif">бета-тестеры</span></h2>
+    </div>
+
+    <div class="testimonials-grid">
+      <div class="testimonial" data-reveal>
+        <div class="testimonial-quote">«Впервые вижу приложение, которое знает, что такое "мерная ложка Whey". Не гуглю и не пересчитываю.»</div>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">А</div>
+          <div>
+            <div class="testimonial-name">Артём К.</div>
+            <div class="testimonial-role">Натурал, 4 года в зале</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial" data-reveal>
+        <div class="testimonial-quote">«Фоткаю обед на работе — за 3 секунды всё посчитано. На MFP у меня уходило минуты три на поиск.»</div>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">Д</div>
+          <div>
+            <div class="testimonial-name">Дмитрий С.</div>
+            <div class="testimonial-role">Пауэрлифтер, 95 кг</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial" data-reveal>
+        <div class="testimonial-quote">«Не думал, что кто-то реально оцифрует русскую еду. Борщ, гречка, творог — всё есть.»</div>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">И</div>
+          <div>
+            <div class="testimonial-name">Игорь М.</div>
+            <div class="testimonial-role">Сушка, −7 кг за 2 месяца</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Цена</div>
+      <h2 data-reveal>Без маркетингового<br/><span class="serif">пиздежа</span></h2>
+      <p class="section-sub" data-reveal>Первая неделя PRO бесплатно. Платишь, когда реально пользуешься.</p>
+    </div>
+
+    <div class="pricing">
+      <div class="price-card" data-reveal>
+        <div class="price-name">Попробовать</div>
+        <div class="price-value"><span class="mono">0 ₽</span></div>
+        <div class="price-note">навсегда</div>
+        <ul class="price-list">
+          <li>Ручной ввод без лимита</li>
+          <li>3 фото в день</li>
+          <li>Расчёт КБЖУ</li>
+          <li>История 7 дней</li>
+        </ul>
+        <a href="register.html" class="btn btn-ghost">Начать</a>
+      </div>
+
+      <div class="price-card popular" data-reveal>
+        <div class="price-badge">ПОПУЛЯРНО</div>
+        <div class="price-name">PRO</div>
+        <div class="price-value"><span class="mono grad" style="background:linear-gradient(135deg,#FF6B00,#FFB700);-webkit-background-clip:text;background-clip:text;color:transparent">499 ₽</span></div>
+        <div class="price-note">в месяц · неделя бесплатно</div>
+        <ul class="price-list">
+          <li>Фото без лимита</li>
+          <li>AI-диетолог в чате</li>
+          <li>Калькулятор спортпита</li>
+          <li>Режим тренировка/отдых</li>
+          <li>Шаблоны рационов</li>
+          <li>Apple Health, Strong</li>
+        </ul>
+        <a href="register.html" class="btn btn-primary">Попробовать PRO</a>
+      </div>
+
+      <div class="price-card" data-reveal>
+        <div class="price-name">PRO+</div>
+        <div class="price-value"><span class="mono">999 ₽</span></div>
+        <div class="price-note">в месяц</div>
+        <ul class="price-list">
+          <li>Всё из PRO</li>
+          <li>Приоритетный AI</li>
+          <li>Еженедельная корректировка</li>
+          <li>Видео с диетологом / мес</li>
+          <li>Ранний доступ к фичам</li>
+        </ul>
+        <a href="register.html" class="btn btn-ghost">Начать PRO+</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="container" style="max-width: 800px;">
+    <div class="section-head">
+      <div class="eyebrow" data-reveal>Вопросы</div>
+      <h2 data-reveal>Часто спрашивают</h2>
+    </div>
+
+    <div data-reveal>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Как точно распознаётся еда?</div>
+        <div class="faq-a">Модель YOLOv8 + Gemini Vision. Точность 92% на русской кухне и 500+ брендах спортпита. Если не уверен — дорогая граммовку в два тапа.</div>
+      </div>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Чем вы лучше MyFitnessPal?</div>
+        <div class="faq-a">MFP для худеющих. Мы для качков: спортпит в рационе, режим тренировка/отдых, русская кухня, честная цена 499 ₽.</div>
+      </div>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Нужна ли интеграция с Apple Health / Strong?</div>
+        <div class="faq-a">Да, подключаем автоматически. Вес, тренировки и калории синхронизируются.</div>
+      </div>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Можно ли отменить подписку?</div>
+        <div class="faq-a">В любой момент. Работает до конца оплаченного периода, потом автоматически переходишь на FREE.</div>
+      </div>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Что с моими данными?</div>
+        <div class="faq-a">Хранятся зашифрованно на серверах в ЕС (Supabase). Не продаём, не делимся. Удаляем в один клик.</div>
+      </div>
+      <div class="faq-item" onclick="this.classList.toggle('open')">
+        <div class="faq-q">Когда релиз?</div>
+        <div class="faq-a">Закрытая бета сейчас. Публичный запуск — лето 2026. Зарегистрируйся — первые 100 получат PRO за 199 ₽ навсегда.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section>
+  <div class="container">
+    <div class="final-cta" data-reveal>
+      <h2>Готов добить<br/>норму <span class="serif">белка?</span></h2>
+      <p>Осталось 87 мест в закрытой бете. Первые 100 юзеров — PRO за 199 ₽ навсегда.</p>
+      <a href="register.html" class="btn btn-primary">
+        Забронировать место
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand">
+        <div class="logo-mark" style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#FF6B00,#FFB700);display:flex;align-items:center;justify-content:center;font-weight:800;color:#000;font-size:15px">G</div>
+        GymFuel AI
+      </div>
+      <p class="footer-desc">AI-счётчик калорий для тех, кто ходит в зал. Россия, 2026.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Продукт</h4>
+      <a href="#how">Как работает</a>
+      <a href="#features">Фишки</a>
+      <a href="#pricing">Цена</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="footer-col">
+      <h4>Компания</h4>
+      <a href="#">О проекте</a>
+      <a href="#">Блог</a>
+      <a href="#">Telegram</a>
+      <a href="#">Контакты</a>
+    </div>
+    <div class="footer-col">
+      <h4>Правовое</h4>
+      <a href="#">Политика конфиденциальности</a>
+      <a href="#">Условия</a>
+      <a href="#">152-ФЗ</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <div>© 2026 GymFuel AI. Все права защищены.</div>
+    <div>Не является медицинским устройством. Консультируйтесь с врачом.</div>
+  </div>
+</footer>
+
+<script>
+  // Reveal animations on scroll
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+  document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
+
+  // Magnetic button effect
+  document.querySelectorAll('.btn-primary').forEach(btn => {
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      btn.style.transform = `translate(${x * 0.15}px, ${y * 0.15 - 2}px)`;
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.transform = '';
+    });
+  });
+</script>
+
+</body>
+</html>
